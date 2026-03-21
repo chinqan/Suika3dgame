@@ -1,18 +1,9 @@
 /**
  * ParticleSystem — GDD Ch.3 §3.4, Ch.4 §4.5
  * 3D merge explosion particles using InstancedMesh
- * [PERF] Zero per-frame allocations: reuse scratch vectors, swap-with-last removal
+ * [PERF] Zero-allocation object pool: all 200 particles pre-allocated at init
  */
 import * as THREE from 'three';
-
-interface Particle {
-  position: THREE.Vector3;
-  velocity: THREE.Vector3;
-  life: number;
-  maxLife: number;
-  scale: number;
-  color: THREE.Color;
-}
 
 const MAX_PARTICLES = 200;
 
@@ -20,8 +11,18 @@ const MAX_PARTICLES = 200;
 const _dummy = new THREE.Object3D();
 const _tempV = new THREE.Vector3();
 
+/** Pre-allocated particle slot */
+interface PooledParticle {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  life: number;      // <= 0 means inactive
+  maxLife: number;
+  scale: number;
+  color: THREE.Color;
+}
+
 export class ParticleSystem {
-  private particles: Particle[] = [];
+  private pool: PooledParticle[];
   private instancedMesh: THREE.InstancedMesh;
   private group: THREE.Group;
   private colorArray: Float32Array;
@@ -48,29 +49,44 @@ export class ParticleSystem {
     this.instancedMesh.count = 0;
     this.instancedMesh.frustumCulled = false;
     this.group.add(this.instancedMesh);
+
+    // [PERF] Pre-allocate ALL particle slots — zero runtime allocation
+    this.pool = [];
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      this.pool.push({
+        position: new THREE.Vector3(),
+        velocity: new THREE.Vector3(),
+        life: 0,       // inactive
+        maxLife: 1,
+        scale: 1,
+        color: new THREE.Color(),
+      });
+    }
   }
 
-  /** Spawn merge explosion particles at position */
+  /** Spawn merge explosion particles at position — ZERO allocation */
   emit(position: THREE.Vector3, color: THREE.Color, count = 20): void {
-    for (let i = 0; i < count; i++) {
-      if (this.particles.length >= MAX_PARTICLES) break;
+    let spawned = 0;
+    for (let i = 0; i < MAX_PARTICLES && spawned < count; i++) {
+      const p = this.pool[i];
+      if (p.life > 0) continue; // slot in use
 
       const speed = 6 + Math.random() * 10;
-      // [PERF] Reuse _tempV for direction calc, then clone for storage
       _tempV.set(
         (Math.random() - 0.5) * 2,
         Math.random() * 1.5 + 0.5,
         (Math.random() - 0.5) * 2,
       ).normalize().multiplyScalar(speed);
 
-      this.particles.push({
-        position: position.clone(),
-        velocity: _tempV.clone(),
-        life: 1.0,
-        maxLife: 0.8 + Math.random() * 0.5,
-        scale: 1.8 + Math.random() * 3.6,
-        color: color.clone(),
-      });
+      // [PERF] copy — not clone! No new objects created
+      p.position.copy(position);
+      p.velocity.copy(_tempV);
+      p.life = 1.0;
+      p.maxLife = 0.8 + Math.random() * 0.5;
+      p.scale = 1.8 + Math.random() * 3.6;
+      p.color.copy(color);
+
+      spawned++;
     }
   }
 
@@ -78,23 +94,18 @@ export class ParticleSystem {
   update(dt: number): void {
     const gravity = -15;
     let alive = 0;
-    let i = 0;
 
-    while (i < this.particles.length) {
-      const p = this.particles[i];
+    for (let i = 0; i < MAX_PARTICLES; i++) {
+      const p = this.pool[i];
+      if (p.life <= 0) continue;
+
       p.life -= dt / p.maxLife;
-
       if (p.life <= 0) {
-        // [PERF] Swap-with-last removal: O(1) instead of splice O(n)
-        const last = this.particles.length - 1;
-        if (i < last) {
-          this.particles[i] = this.particles[last];
-        }
-        this.particles.length = last;
-        continue; // re-check same index (now has swapped element)
+        p.life = 0; // mark inactive
+        continue;
       }
 
-      // Physics — [PERF] no allocation: mutate velocity in-place, use scratch for addend
+      // Physics — mutate in-place, use scratch for addend
       p.velocity.y += gravity * dt;
       _tempV.copy(p.velocity).multiplyScalar(dt);
       p.position.add(_tempV);
@@ -114,7 +125,6 @@ export class ParticleSystem {
       this.colorArray[ci + 2] = p.color.b * (0.5 + p.life * 0.5);
 
       alive++;
-      i++;
     }
 
     this.instancedMesh.count = alive;

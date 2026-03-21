@@ -31,7 +31,7 @@ export const SHAPE_BASE_DENSITY = 1.5;
 export const SHAPE_DENSITY_PER_LEVEL = 0.4;
 export const SHAPE_LINEAR_DAMPING = 0.3;
 export const SHAPE_ANGULAR_DAMPING = 0.5;
-export const COLLISION_RADIUS_PADDING = 0.01;  // 極小 padding，讓球體視覺上更加密合
+export const COLLISION_RADIUS_PADDING = -0.02;  // 負值讓碰撞球略縮，消除多面體面與球體之間的空隙
 
 // ---- Wall Physics ----
 export const WALL_FRICTION = 1.0;

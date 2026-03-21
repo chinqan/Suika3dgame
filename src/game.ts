@@ -59,11 +59,14 @@ export class Game {
   private aimLine: THREE.Mesh | null = null;
   private ghostMesh: THREE.Group | null = null;
 
+  // ---- [PERF] Shared Snapshot Renderer (NEXT + Evolution Bar) ----
+  private snapshotRenderer!: THREE.WebGLRenderer;
+  private snapshotScene!: THREE.Scene;
+  private snapshotCamera!: THREE.PerspectiveCamera;
+  private snapshotMesh: THREE.Group | null = null;
+
   // ---- Next Preview ----
-  private nextPreviewScene!: THREE.Scene;
-  private nextPreviewCamera!: THREE.PerspectiveCamera;
   private nextPreviewRenderer!: THREE.WebGLRenderer;
-  private nextPreviewMesh: THREE.Group | null = null;
 
   // ---- Game State ----
   private score = 0;
@@ -88,6 +91,7 @@ export class Game {
 
   // ---- Camera Shake ----
   private shakeIntensity = 0;
+  private readonly _scratchColor = new THREE.Color(); // [PERF] 重用 Color 物件
 
   // ---- Timing ----
   private animationId: number | null = null;
@@ -347,7 +351,22 @@ export class Game {
   // ============================
 
   private setupNextPreview(): void {
-    // Dedicated small renderer
+    // ---- Shared Snapshot Renderer (used by NEXT + Evolution Bar) ----
+    this.snapshotRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    this.snapshotRenderer.setSize(128, 128);
+
+    this.snapshotScene = new THREE.Scene();
+    this.snapshotScene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(2, 3, 4);
+    this.snapshotScene.add(dirLight);
+    const fillDir = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillDir.position.set(-3, -1, -3);
+    this.snapshotScene.add(fillDir);
+
+    this.snapshotCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+
+    // ---- Dedicated NEXT canvas renderer ----
     const canvas = document.getElementById('next-preview') as HTMLCanvasElement;
     if (canvas) {
       this.nextPreviewRenderer = new THREE.WebGLRenderer({
@@ -359,50 +378,62 @@ export class Game {
       this.nextPreviewRenderer.toneMapping = THREE.ACESFilmicToneMapping;
       this.nextPreviewRenderer.toneMappingExposure = 1.2;
     }
+  }
 
-    this.nextPreviewScene = new THREE.Scene();
-    this.nextPreviewScene.background = new THREE.Color(0x2a2a40); // 較亮的深灰藍底圖
+  /** [PERF] Render a snapshot using the shared renderer, return dataURL */
+  private renderSnapshot(level: number, paddingFactor = 1.4): string {
+    if (this.snapshotMesh) {
+      this.snapshotScene.remove(this.snapshotMesh);
+    }
+    const mesh = createNeonMesh(level);
+    mesh.rotation.x = Math.PI / 6;
+    mesh.rotation.y = Math.PI / 4;
 
-    // 環境光 — 基礎亮度
-    this.nextPreviewScene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const shapeRadius = SHAPES[level].collisionRadius;
+    const fov = 40;
+    const cameraZ = (shapeRadius * paddingFactor) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
+    this.snapshotCamera.position.set(0, 0, cameraZ);
+    this.snapshotCamera.lookAt(0, 0, 0);
+    this.snapshotCamera.updateProjectionMatrix();
 
-    // 主方向光 — 從右上前方照入，營造 flat-shading 立體面
-    const mainDir = new THREE.DirectionalLight(0xffffff, 1.2);
-    mainDir.position.set(3, 4, 5);
-    this.nextPreviewScene.add(mainDir);
+    this.snapshotScene.add(mesh);
+    this.snapshotRenderer.render(this.snapshotScene, this.snapshotCamera);
+    const dataUrl = this.snapshotRenderer.domElement.toDataURL('image/png');
 
-    // 補光 — 從左下後方，防止暗面全黑
-    const fillDir = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillDir.position.set(-3, -1, -3);
-    this.nextPreviewScene.add(fillDir);
+    this.snapshotScene.remove(mesh);
+    this.snapshotMesh = null;
 
-    this.nextPreviewCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
-    this.nextPreviewCamera.position.set(0, 0, 4);
-    this.nextPreviewCamera.lookAt(0, 0, 0);
+    return dataUrl;
   }
 
   private updateNextPreview(): void {
-    if (this.nextPreviewMesh) {
-      this.nextPreviewScene.remove(this.nextPreviewMesh);
-    }
-    this.nextPreviewMesh = createNeonMesh(this.nextLevel);
-    this.nextPreviewScene.add(this.nextPreviewMesh);
+    if (!this.nextPreviewRenderer) return;
 
-    // 動態調整攝影機距離，讓每個形狀都能完美放進框內 (稍微留白 1.4 倍)
+    // 建立專用場景並渲染到 NEXT canvas 上
+    // 使用 NEXT 專用的 renderer + scene，每次只繪製一次
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x2a2a40);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const mainDir = new THREE.DirectionalLight(0xffffff, 1.2);
+    mainDir.position.set(3, 4, 5);
+    scene.add(mainDir);
+    const fillDir = new THREE.DirectionalLight(0xffffff, 0.4);
+    fillDir.position.set(-3, -1, -3);
+    scene.add(fillDir);
+
+    const mesh = createNeonMesh(this.nextLevel);
+    mesh.rotation.y = Math.PI / 4;
+    mesh.rotation.x = Math.PI / 8;
+
     const shapeRadius = SHAPES[this.nextLevel].collisionRadius;
     const fov = 40;
+    const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 50);
     const cameraZ = (shapeRadius * 1.4) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
-    this.nextPreviewCamera.position.set(0, 0, cameraZ);
-    this.nextPreviewCamera.lookAt(0, 0, 0);
-  }
+    camera.position.set(0, 0, cameraZ);
+    camera.lookAt(0, 0, 0);
 
-  private renderNextPreview(): void {
-    if (!this.nextPreviewRenderer) return;
-    if (this.nextPreviewMesh) {
-      this.nextPreviewMesh.rotation.y += 0.02;
-      this.nextPreviewMesh.rotation.x += 0.005;
-    }
-    this.nextPreviewRenderer.render(this.nextPreviewScene, this.nextPreviewCamera);
+    scene.add(mesh);
+    this.nextPreviewRenderer.render(scene, camera);
   }
 
   // ============================
@@ -532,49 +563,12 @@ export class Game {
     const config = DIFFICULTIES[this.difficulty];
     const endIndex = config.startIndex + config.shapeCount;
 
-    // --- 建立快照專用 3D 渲染器 (離線渲染) ---
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(128, 128); // 高解析度預防失真
-    const scene = new THREE.Scene();
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    dirLight.position.set(2, 3, 4);
-    scene.add(dirLight);
-
-    // 計算最大半徑（用於顯示尺寸比例）
-    const fov = 40;
-    const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 100);
-
+    // [PERF] 使用共用快照渲染器，不再每次 new WebGLRenderer
     for (let i = config.startIndex; i < endIndex; i++) {
-      const mesh = createNeonMesh(i);
-
-      // 稍微旋轉，展示出它原汁原味多邊形的立體特徵
-      mesh.rotation.x = Math.PI / 6;
-      mesh.rotation.y = Math.PI / 4;
-
-      // 每個形狀獨立計算攝影機距離，確保填滿畫布（無透明邊距）
-      const shapeRadius = SHAPES[i].collisionRadius;
-      const cameraZ = (shapeRadius * 1.3) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
-      camera.position.set(0, 0, cameraZ);
-      camera.lookAt(0, 0, 0);
-      camera.updateProjectionMatrix();
-
-      scene.add(mesh);
-      renderer.render(scene, camera);
-
-      const dataUrl = renderer.domElement.toDataURL('image/png');
-      scene.remove(mesh);
-      mesh.traverse((m) => {
-        if (m instanceof THREE.Mesh) {
-          m.geometry?.dispose();
-          if (Array.isArray(m.material)) m.material.forEach(mat => mat.dispose());
-          else m.material?.dispose();
-        }
-      });
+      const dataUrl = this.renderSnapshot(i, 1.3);
 
       const wrapper = document.createElement('div');
       wrapper.className = 'evo-shape';
-      // 依碰撞半徑比例分配寬度
       const radius = SHAPES[i].collisionRadius;
       wrapper.style.flexGrow = String(radius);
       wrapper.style.flexBasis = '0';
@@ -589,8 +583,6 @@ export class Game {
       wrapper.appendChild(img);
       bar.appendChild(wrapper);
     }
-
-    renderer.dispose();
   }
 
   // ============================
@@ -671,8 +663,9 @@ export class Game {
     // Particles — use PRE-MERGE element color (the shapes that were merged)
     const preMergeLevel = Math.max(0, event.newLevel - 1);
     const preMergeDef = SHAPES[preMergeLevel];
-    const color = new THREE.Color(preMergeDef.color);
-    this.particleSystem.emit(event.position, color, 20 + event.newLevel * 4);
+    // [PERF] 使用 set() 覆寫而非 new Color()
+    this._scratchColor.set(preMergeDef.color);
+    this.particleSystem.emit(event.position, this._scratchColor, 20 + event.newLevel * 4);
 
     // Combo
     this.comboCount++;
@@ -822,8 +815,7 @@ export class Game {
       this.postProcessing.render();
       this.sceneManager.renderCSS2D();
 
-      // NEXT preview
-      this.renderNextPreview();
+      // NEXT preview — [PERF] 已改為 on-demand，不再每幀渲染
 
       // FPS
       this.frameCount++;
