@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Neon Shape Merge — 3D</title>
+  <meta name="description" content="3D Physics Drop Puzzle - Merge neon polyhedra in a cyberpunk container" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="game-wrapper">
+    <!-- HUD Top: SCORE (left of container) + NEXT (right of container) -->
+    <div id="hud-top">
+      <div id="hud-score">
+        <div class="hud-label">SCORE</div>
+        <div id="score-value">0</div>
+      </div>
+      <div id="hud-next">
+        <div class="hud-label">NEXT</div>
+        <div id="next-preview-container">
+          <canvas id="next-preview" width="80" height="80"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD Left: Leaderboard + Settings -->
+    <div id="hud-left-bar">
+      <button id="btn-leaderboard" title="排行榜">🏆</button>
+      <button id="btn-settings" title="設定">⚙️</button>
+    </div>
+
+    <!-- Three.js Canvas 掛載點 -->
+    <div id="canvas-container"></div>
+
+    <!-- Evolution Bar -->
+    <div id="evolution-bar"></div>
+
+    <!-- Overlay: 難度選擇 -->
+    <div id="overlay-difficulty" class="overlay">
+      <div class="overlay-content">
+        <h2 class="overlay-title cyan-glow">SELECT DIFFICULTY</h2>
+        <div class="player-id-row">
+          <label for="player-id-input">PLAYER ID</label>
+          <input type="text" id="player-id-input" maxlength="16" placeholder="Enter your name" />
+        </div>
+        <button class="btn-difficulty btn-easy" data-difficulty="easy">
+          <span class="btn-diff-name">EASY</span>
+          <span class="btn-diff-desc">7 種形狀</span>
+        </button>
+        <button class="btn-difficulty btn-normal" data-difficulty="normal">
+          <span class="btn-diff-name">NORMAL</span>
+          <span class="btn-diff-desc">8 種形狀</span>
+        </button>
+        <button class="btn-difficulty btn-hard" data-difficulty="hard">
+          <span class="btn-diff-name">HARD</span>
+          <span class="btn-diff-desc">9 種形狀</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Overlay: Game Over -->
+    <div id="overlay-gameover" class="overlay" style="display:none">
+      <div class="overlay-content">
+        <h2 class="overlay-title red-glow">GAME OVER</h2>
+        <div class="gameover-score">
+          <div class="gameover-label">FINAL SCORE</div>
+          <div id="gameover-score-value">0</div>
+        </div>
+        <div class="gameover-high">
+          <div class="gameover-label">BEST</div>
+          <div id="gameover-high-value">0</div>
+        </div>
+        <button id="btn-restart" class="btn-action">再來一局</button>
+      </div>
+    </div>
+
+    <!-- Overlay: 排行榜 -->
+    <div id="overlay-leaderboard" class="overlay" style="display:none">
+      <div class="overlay-content overlay-leaderboard-content">
+        <div class="leaderboard-ribbon">🏆 LEADERBOARD</div>
+        <div id="leaderboard-body">
+          <div class="loading-text">Loading...</div>
+        </div>
+        <button id="btn-leaderboard-close" class="btn-action btn-gold">確認</button>
+      </div>
+    </div>
+
+    <!-- Overlay: 設定 -->
+    <div id="overlay-settings" class="overlay" style="display:none">
+      <div class="overlay-content">
+        <h2 class="overlay-title settings-glow">⚙️ SETTINGS</h2>
+        <div class="settings-section">
+          <div class="settings-label">🔊 合成音效</div>
+          <div class="settings-desc">選擇音效類型，並點擊按鈕試聽</div>
+          <select id="sound-type-select">
+            <option value="standard">📦 標準音效</option>
+            <option value="crystal">💎 水晶音效</option>
+            <option value="waterdrop">💧 水滴聲</option>
+            <option value="bomb">💥 炸彈聲</option>
+            <option value="stone">🪨 堅硬石頭聲</option>
+            <option value="cosmic">🌌 宇宙電波聲</option>
+            <option value="fighting">🥊 格鬥打擊音效</option>
+            <option value="shooting">🔫 射擊爆破音效</option>
+          </select>
+          <div id="sound-preview-grid" class="sound-grid">
+            <button class="btn-preview" data-sound="drop">🔽 掉落</button>
+            <button class="btn-preview" data-sound="combo">⚡ 連擊</button>
+            <button class="btn-preview" data-sound="bump">🔊 球碰撞</button>
+            <button class="btn-preview" data-sound="thud">🔊 撞牆</button>
+          </div>
+          <div class="settings-label" style="margin-top:10px">💥 合成音效試聽 (Lv.1~9)</div>
+          <div id="merge-preview-grid" class="sound-grid">
+            <button class="btn-preview-merge" data-level="0">Lv.1</button>
+            <button class="btn-preview-merge" data-level="1">Lv.2</button>
+            <button class="btn-preview-merge" data-level="2">Lv.3</button>
+            <button class="btn-preview-merge" data-level="3">Lv.4</button>
+            <button class="btn-preview-merge" data-level="4">Lv.5</button>
+            <button class="btn-preview-merge" data-level="5">Lv.6</button>
+            <button class="btn-preview-merge" data-level="6">Lv.7</button>
+            <button class="btn-preview-merge" data-level="7">Lv.8</button>
+            <button class="btn-preview-merge" data-level="8">Lv.9</button>
+          </div>
+        </div>
+        <button id="btn-settings-close" class="btn-action btn-purple">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="loading-content">
+      <div class="loading-title">NEON SHAPE MERGE</div>
+      <div class="loading-subtitle">INITIALIZING 3D ENGINE...</div>
+      <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

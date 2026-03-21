@@ -87,7 +87,7 @@
 ### 3D 渲染視覺測試
 
 - [ ] 9 種 3D 多面體 Geometry 正確顯示
-- [ ] MeshPhysicalMaterial 半透明玻璃質感正確
+- [ ] MeshStandardMaterial 半透明霓虹質感正確
 - [ ] EdgesGeometry 稜線光暈正確顯示
 - [ ] UnrealBloomPass 泛光效果正確
 - [ ] 光照系統正常（環境光 + 3 個 PointLight）

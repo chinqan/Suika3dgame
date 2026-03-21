@@ -45,9 +45,24 @@
 | 模組 | 說明 |
 |------|------|
 | `SceneManager` | 管理 Three.js Scene、PerspectiveCamera、OrbitControls（開發用）|
-| `MaterialFactory` | 霓虹 3D Material 的建立與快取（MeshPhysicalMaterial + 發光邊框） |
+| `MaterialFactory` | 霓虹 3D Material 的建立與快取（MeshStandardMaterial + 發光邊框） |
 | `GeometryFactory` | 9 種 3D Geometry 的建立與快取（避免重複生成） |
-| `PostProcessing` | EffectComposer + UnrealBloomPass（全場景泛光效果） |
+| `PostProcessing` | EffectComposer + UnrealBloomPass（半解析度泛光效果） |
+| `InputManager` | 滑鼠/觸控 → Raycaster → Z=0 垂直平面 → 世界座標 |
+| `GridFlowSystem` | 地板光球流動效果（THREE.Points，1 draw call） |
+| `ParticleSystem` | 合成爆炸粒子（InstancedMesh，1 draw call） |
+
+### 效能優化規格
+
+| 項目 | 規格 |
+|------|------|
+| **WebGLRenderer** | `antialias: false`、`pixelRatio: min(devicePixelRatio, 1.5)` |
+| **Bloom** | UnrealBloomPass 半解析度（`width/2 × height/2`） |
+| **材質** | MeshStandardMaterial（非 MeshPhysicalMaterial） |
+| **EdgesGeometry** | 按 level 快取共用 |
+| **GridFlow** | `THREE.Points`（1 draw call，天生 billboard） |
+| **Particles** | `InstancedMesh` + swap-with-last 刪除 + reuse Vector3 |
+| **InputManager** | `Plane(0,0,1,0)` 垂直平面投射（避免陡角放大） |
 
 ---
 

@@ -13,7 +13,7 @@
 
 - 深色背景（near-black `#0a0a0f`）
 - 高飽和度霓虹配色（青色、洋紅、螢光綠、橙色）
-- **3D 半透明玻璃質感多面體**（MeshPhysicalMaterial + transmission）
+- **3D 半透明霓虹多面體**（MeshStandardMaterial + emissive，效能優化版）
 - 發光效果（Emissive Glow）與後處理泛光（UnrealBloomPass）
 - 3D 立體地板格線（GridHelper + 自訂 Shader）
 - 格線光流（Grid Flow）3D 粒子——能量在格線上流動
@@ -69,28 +69,28 @@
 ```
 Layer 3 (外): Bloom Glow     ── UnrealBloomPass 全場景泛光（emissive 材質自動發光）
 Layer 2 (中): Edge Wireframe  ── EdgesGeometry + LineSegments（霓虹色稜線）
-Layer 1 (內): Main Mesh       ── MeshPhysicalMaterial（半透明玻璃體 + emissive 發光）
+Layer 1 (內): Main Mesh       ── MeshStandardMaterial（半透明霓虹體 + emissive 發光）
 ```
 
 ### Layer 1：Main Mesh（主形狀）
 
+> [!IMPORTANT]
+> **效能優化**：已從 `MeshPhysicalMaterial` 降級為 `MeshStandardMaterial`，移除 `transmission`/`clearcoat`。霓虹發光效果改由 `emissive` + Bloom 後處理實現，FPS 提升 ~100%。
+
 ```typescript
-const material = new THREE.MeshPhysicalMaterial({
+const material = new THREE.MeshStandardMaterial({
   color: shapeColor,           // 形狀基礎色
   emissive: shapeColor,        // 自發光色（被 Bloom 放大）
-  emissiveIntensity: 0.3,      // 自發光強度
+  emissiveIntensity: 0.4,      // 自發光強度
   transparent: true,
-  opacity: 0.25,               // 半透明（看得到內部結構）
-  transmission: 0.6,           // 光線穿透（玻璃質感）
-  roughness: 0.1,              // 低粗糙度（光滑表面）
-  metalness: 0.0,              // 非金屬
-  clearcoat: 1.0,              // 清漆層（表面反光）
-  clearcoatRoughness: 0.1,     // 清漆粗糙度
+  opacity: 0.35,               // 半透明
+  roughness: 0.3,              // 中等粗糙度
+  metalness: 0.1,              // 微金屬感
   side: THREE.DoubleSide,      // 雙面渲染
 });
 ```
 
-**視覺效果**：半透明玻璃質感的 3D 多面體，內部可見結構，表面帶有清漆反光，整體散發霓虹色光暈。
+**視覺效果**：半透明霓虹 3D 多面體，搭配 Bloom 效果產生強烈發光感，保持 Cyberpunk 風格的同時大幅降低 GPU 負荷。
 
 ### Layer 2：Edge Wireframe（稜線光暈）
 
@@ -144,13 +144,10 @@ mesh.add(wireframe); // 作為 Mesh 子物件
 
 ## 4.4 環境場景設計
 
-### 3D 地板
+### 3D 地板（純 Wireframe）
 
-| 參數 | 數值 | 說明 |
-|------|------|------|
-| 類型 | PlaneGeometry(30, 30) | 大型水平平面 |
-| 位置 | Y=-0.01 | 略低於物理地板，避免 Z-fighting |
-| Material | MeshBasicMaterial, color=#0a0a0f | 幾乎純黑 |
+> **變更**：移除實心 PlaneGeometry 地板，僅保留 GridHelper wireframe 格線。
+> 這樣格線光球（Grid Flow Orbs）不會被實心平面遮擋，可完整顯示。
 
 ### 3D 地板格線
 
@@ -163,7 +160,7 @@ const gridHelper = new THREE.GridHelper(
 );
 gridHelper.material.opacity = 0.15;
 gridHelper.material.transparent = true;
-gridHelper.position.y = 0.01;
+gridHelper.position.y = 0.0; // 與物理地板同高
 ```
 
 | 屬性 | 值 | 說明 |

@@ -12,6 +12,8 @@
 | **合成方式** | 全程式生成（Procedural Synthesis），無需載入外部音檔 |
 | **初始化** | 懶初始化：首次使用者互動時建立 AudioContext |
 | **快取** | 噪音 Buffer 按 `${type}_${level}` 鍵快取於 Map |
+| **架構** | 每種音效包（SoundPack）使用獨立的多層合成方法（4-5 層 Oscillator/Noise/Filter），level 越高音調越低沉厚實 |
+| **API** | `play(type, level)` 統一入口；`preview(type, pack)` 試聽；`setPack(pack)` 切換 |
 
 ### 7.1.1 音效身份定義（Sonic Identity）
 
@@ -61,6 +63,9 @@
 ## 7.3 合成音效（Merge Sound）— 8 種可選類型
 
 玩家可在設定中切換，即時儲存至 localStorage。
+
+### 試聽功能
+設定 Overlay 提供 3 個試聽按鈕（Drop / Merge / Combo），切換音效包後即可點擊試聽，使用 `AudioManager.preview(type, pack)` 方法。每個音效包的合成參數（waveform、baseFreq、freqMul、attack、decay、gain、detune）定義在 `PACK_PROFILES` 常數中。
 
 ### 總覽表
 
