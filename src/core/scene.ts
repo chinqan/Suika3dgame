@@ -62,22 +62,9 @@ export class SceneManager {
     window.visualViewport?.addEventListener('resize', this.onResize.bind(this));
   }
 
-  private static readonly ASPECT = 9 / 16; // 直版比例
-
   private onResize(): void {
-    const wrapper = document.getElementById('game-wrapper')!;
-    // 高度 = 瀏覽器實際可見高度
-    const vh = window.visualViewport?.height ?? window.innerHeight;
-    const vw = window.visualViewport?.width ?? window.innerWidth;
-    // 寬度 = 高度 × 9/16，但不超過螢幕寬
-    const h = vh;
-    const w = Math.min(vh * SceneManager.ASPECT, vw);
-
-    // 設定 wrapper 尺寸
-    wrapper.style.width = `${w}px`;
-    wrapper.style.height = `${h}px`;
-
-    // 同步 renderer
+    const w = window.visualViewport?.width ?? window.innerWidth;
+    const h = window.visualViewport?.height ?? window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);

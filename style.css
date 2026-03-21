@@ -49,18 +49,12 @@ body {
   touch-action: none;
 }
 
-/* ---- Game Wrapper (直版 9:16 比例，高度優先) ---- */
+/* ---- Game Wrapper ---- */
 #game-wrapper {
-  --portrait-ratio: 9 / 16;
   position: relative;
-  /* 高度填滿 viewport */
+  width: 100vw;
   height: 100vh;
   height: 100dvh;
-  /* 寬度 = 高度 × 9/16，但不超過螢幕寬度 */
-  width: min(calc(100vh * (9 / 16)), 100vw);
-  width: min(calc(100dvh * (9 / 16)), 100vw);
-  max-width: 100vw;
-  margin: 0 auto; /* 桌機上水平居中 */
   overflow: hidden;
 }
 
