@@ -697,10 +697,6 @@ body {
    Mobile Responsive
    ============================================================ */
 @media (max-width: 480px) {
-  #hud-top {
-    width: 90vw;
-  }
-
   #score-value {
     font-size: 28px;
   }
