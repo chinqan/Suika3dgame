@@ -237,10 +237,11 @@ body {
   border-radius: 16px;
   padding: 32px 28px;
   text-align: center;
-  min-width: 300px;
-  max-width: 400px;
+  min-width: 280px;
+  max-width: min(400px, 90vw);
   max-height: 85vh;
   overflow-y: auto;
+  width: 90vw;
 }
 
 .overlay-title {
@@ -444,7 +445,9 @@ body {
 }
 
 .overlay-leaderboard-content {
-  min-width: 380px;
+  min-width: auto;
+  max-width: min(420px, 92vw);
+  width: 92vw;
 }
 
 #leaderboard-body {
@@ -678,5 +681,65 @@ body {
     opacity: 0;
     margin-top: -60px;
     font-size: 24px;
+  }
+}
+
+/* ============================================================
+   Mobile Responsive
+   ============================================================ */
+@media (max-width: 480px) {
+  #hud-top {
+    width: 90vw;
+  }
+
+  #score-value {
+    font-size: 28px;
+  }
+
+  .overlay-content {
+    padding: 20px 16px;
+    border-radius: 12px;
+  }
+
+  .overlay-title {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .sound-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  #merge-preview-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .btn-preview,
+  .btn-preview-merge {
+    padding: 8px 4px;
+    font-size: 12px;
+  }
+
+  .btn-action {
+    font-size: 14px;
+    padding: 10px 20px;
+  }
+
+  #hud-left-bar {
+    gap: 8px;
+  }
+
+  #btn-leaderboard,
+  #btn-settings {
+    padding: 8px 10px;
+    font-size: 18px;
+  }
+
+  .leaderboard-ribbon {
+    font-size: 20px !important;
+  }
+
+  #leaderboard-body table {
+    font-size: 12px !important;
   }
 }
