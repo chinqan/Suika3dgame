@@ -57,12 +57,14 @@ export class SceneManager {
     this.container.appendChild(this.css2DRenderer.domElement);
 
     // ---- Resize ----
+    this.onResize();
     window.addEventListener('resize', this.onResize.bind(this));
+    window.visualViewport?.addEventListener('resize', this.onResize.bind(this));
   }
 
   private onResize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);

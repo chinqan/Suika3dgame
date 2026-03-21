@@ -49,12 +49,18 @@ body {
   touch-action: none;
 }
 
-/* ---- Game Wrapper ---- */
+/* ---- Game Wrapper (直版 9:16 比例，高度優先) ---- */
 #game-wrapper {
+  --portrait-ratio: 9 / 16;
   position: relative;
-  width: 100vw;
+  /* 高度填滿 viewport */
   height: 100vh;
-  height: 100dvh; /* 動態 viewport 高度 */
+  height: 100dvh;
+  /* 寬度 = 高度 × 9/16，但不超過螢幕寬度 */
+  width: min(calc(100vh * (9 / 16)), 100vw);
+  width: min(calc(100dvh * (9 / 16)), 100vw);
+  max-width: 100vw;
+  margin: 0 auto; /* 桌機上水平居中 */
   overflow: hidden;
 }
 
@@ -77,11 +83,10 @@ body {
 #hud-top {
   position: absolute;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
   z-index: 50;
-  width: 62vh;
-  /* 重新精確計算：對應 3D 箱子「正面最前側(z=2.5)」在鏡頭投影下的邊緣寬度 */
+  padding: 0 12px;
   pointer-events: none;
 }
 
