@@ -98,7 +98,7 @@ body {
 
 #hud-next {
   position: absolute;
-  right: 8px;
+  right: 0;
   top: -15px;
   display: flex;
   flex-direction: column;
