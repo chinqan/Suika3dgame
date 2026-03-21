@@ -5,14 +5,14 @@
 // ---- Container (3D World Units) ----
 export const CONTAINER_WIDTH = 10;
 export const CONTAINER_DEPTH = 5;  // = largest shape (Lv.8) diameter
-export const CONTAINER_HEIGHT = 13;
+export const CONTAINER_HEIGHT = 12;
 export const HALF_WIDTH = CONTAINER_WIDTH / 2;
 export const HALF_DEPTH = CONTAINER_DEPTH / 2;
 
 // ---- Game Area ----
 export const FLOOR_Y = 0;
-export const GAME_OVER_LINE_Y = 12.5; // 往上墊高 1.5 單位
-export const DROP_Y = 13.5;         // 往上墊高 1.5 單位
+export const GAME_OVER_LINE_Y = CONTAINER_HEIGHT; // 切齊箱子頂端
+export const DROP_Y = 12.5;
 export const DROP_SPAWN_Y = CONTAINER_HEIGHT + 2.5; // 生成點也提高
 
 // ---- Timing ----
@@ -53,8 +53,8 @@ export const BLOOM_THRESHOLD = 0.6;
 export const CAMERA_FOV = 45;
 export const CAMERA_NEAR = 0.1;
 export const CAMERA_FAR = 100;
-export const CAMERA_POSITION = { x: 0, y: 7.85, z: 22 } as const;  // 微小調整視角高度
-export const CAMERA_LOOKAT = { x: 0, y: 6.85, z: 0 } as const;
+export const CAMERA_POSITION = { x: 0, y: 6.35, z: 22 } as const;
+export const CAMERA_LOOKAT = { x: 0, y: 5.35, z: 0 } as const;
 
 // ---- Grid Flow ----
 export const GRID_FLOW_MAX_COUNT = 20;

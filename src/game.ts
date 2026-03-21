@@ -71,6 +71,7 @@ export class Game {
   private currentLevel = 0;
   private nextLevel = 0;
   private maxDropLevel = 3;
+  private startIndex = 0;
   private canDrop = true;
   private isGameOver = false;
   private isPlaying = false;
@@ -177,8 +178,8 @@ export class Game {
     this.setupNextPreview();
 
     // 14. Initial shape levels
-    this.currentLevel = randomInt(0, this.maxDropLevel);
-    this.nextLevel = randomInt(0, this.maxDropLevel);
+    this.currentLevel = randomInt(this.startIndex, this.startIndex + this.maxDropLevel);
+    this.nextLevel = randomInt(this.startIndex, this.startIndex + this.maxDropLevel);
     this.updateNextPreview();
 
     // 15. Start render loop
@@ -239,7 +240,7 @@ export class Game {
 
     // 木頭色半透明材質
     const woodMat = new THREE.MeshStandardMaterial({
-      color: 0x8B6914,      // 溫暖的木頭色
+      color: 0xCCCCCC,      // 灰白色
       transparent: true,
       opacity: 0.2,
       roughness: 0.8,
@@ -484,6 +485,7 @@ export class Game {
     this.difficulty = diff;
     const config = DIFFICULTIES[diff];
     this.maxDropLevel = config.maxDropLevel;
+    this.startIndex = config.startIndex;
 
     const idInput = document.getElementById('player-id-input') as HTMLInputElement;
     this.playerId = idInput.value.trim().slice(0, 16) || 'guest';
@@ -505,8 +507,8 @@ export class Game {
     this.physics.cleanup();
     this.updateScore(0);
 
-    this.currentLevel = randomInt(0, this.maxDropLevel);
-    this.nextLevel = randomInt(0, this.maxDropLevel);
+    this.currentLevel = randomInt(this.startIndex, this.startIndex + this.maxDropLevel);
+    this.nextLevel = randomInt(this.startIndex, this.startIndex + this.maxDropLevel);
     this.updateGhostShape();
     this.updateNextPreview();
     this.aimGuideGroup.visible = true;
@@ -518,10 +520,10 @@ export class Game {
     const bar = document.getElementById('evolution-bar');
     if (!bar) return;
     bar.innerHTML = '';
-    
+
     const config = DIFFICULTIES[this.difficulty];
     const endIndex = config.startIndex + config.shapeCount;
-    
+
     // --- 建立快照專用 3D 渲染器 (離線渲染) ---
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setSize(128, 128); // 高解析度預防失真
@@ -530,26 +532,28 @@ export class Game {
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
     dirLight.position.set(2, 3, 4);
     scene.add(dirLight);
-    
-    // 計算統一的攝影機距離，基於最大那顆球的半徑 (確保全部比例正確)
-    const largestRadius = SHAPES[endIndex - 1].collisionRadius;
+
+    // 計算最大半徑（用於顯示尺寸比例）
     const fov = 40;
-    const cameraZ = (largestRadius * 1.3) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
     const camera = new THREE.PerspectiveCamera(fov, 1, 0.1, 100);
-    camera.position.set(0, 0, cameraZ);
-    camera.lookAt(0, 0, 0);
 
     for (let i = config.startIndex; i < endIndex; i++) {
       const mesh = createNeonMesh(i);
-      
+
       // 稍微旋轉，展示出它原汁原味多邊形的立體特徵
       mesh.rotation.x = Math.PI / 6;
       mesh.rotation.y = Math.PI / 4;
 
-      // 「不要發光」：快照不使用 UnrealBloomPass，完美呈現原本清晰無發光的網格與實體。
+      // 每個形狀獨立計算攝影機距離，確保填滿畫布（無透明邊距）
+      const shapeRadius = SHAPES[i].collisionRadius;
+      const cameraZ = (shapeRadius * 1.3) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
+      camera.position.set(0, 0, cameraZ);
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+
       scene.add(mesh);
       renderer.render(scene, camera);
-      
+
       const dataUrl = renderer.domElement.toDataURL('image/png');
       scene.remove(mesh);
       mesh.traverse((m) => {
@@ -559,28 +563,25 @@ export class Game {
           else m.material?.dispose();
         }
       });
-      
+
       const wrapper = document.createElement('div');
       wrapper.className = 'evo-shape';
-      
+      // 依碰撞半徑比例分配寬度
+      const radius = SHAPES[i].collisionRadius;
+      wrapper.style.flexGrow = String(radius);
+      wrapper.style.flexBasis = '0';
+
       const img = document.createElement('img');
       img.src = dataUrl;
-      // 全部給定相同的畫布 HTML 大小，由相機的統一景深自動呈現原汁原味的「由小到大」物理比例
-      img.style.width = '64px';   // 在放大一點 (確保最大顆非常明顯)
-      img.style.height = '64px';
+      img.style.width = '100%';
+      img.style.height = '100%';
       img.style.display = 'block';
-      
+      img.style.objectFit = 'contain';
+
       wrapper.appendChild(img);
       bar.appendChild(wrapper);
-      
-      if (i < endIndex - 1) {
-        const arrow = document.createElement('div');
-        arrow.className = 'evo-arrow';
-        arrow.textContent = '>';
-        bar.appendChild(arrow);
-      }
     }
-    
+
     renderer.dispose();
   }
 
@@ -628,7 +629,7 @@ export class Game {
     this.audio.play('drop', this.currentLevel);
 
     this.currentLevel = this.nextLevel;
-    this.nextLevel = randomInt(0, this.maxDropLevel);
+    this.nextLevel = randomInt(this.startIndex, this.startIndex + this.maxDropLevel);
     this.updateGhostShape();
     this.updateNextPreview();
 
