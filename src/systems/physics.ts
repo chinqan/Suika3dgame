@@ -69,7 +69,8 @@ export class PhysicsSystem {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
       .setTranslation(x, y, z)
       .setLinearDamping(SHAPE_LINEAR_DAMPING)
-      .setAngularDamping(SHAPE_ANGULAR_DAMPING);
+      .setAngularDamping(SHAPE_ANGULAR_DAMPING)
+      .setCcdEnabled(true); // 啟用連續碰撞檢測，防止小球高速穿模
 
     const body = this.world.createRigidBody(bodyDesc);
 

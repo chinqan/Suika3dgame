@@ -92,6 +92,9 @@ export class MergeSystem {
         }
       }
     });
+
+    // 每幀處理完後清空，避免 Handle 被回收重用時無法合成
+    this.mergeCooldown.clear();
   }
 
   private merge(s1: GameShape, s2: GameShape): void {

@@ -92,6 +92,7 @@ export class Game {
   // ---- Timing ----
   private animationId: number | null = null;
   private lastTime = 0;
+  private physicsAccumulator = 0;
 
   // ---- FPS ----
   private fpsEl!: HTMLElement;
@@ -386,6 +387,13 @@ export class Game {
     }
     this.nextPreviewMesh = createNeonMesh(this.nextLevel);
     this.nextPreviewScene.add(this.nextPreviewMesh);
+
+    // 動態調整攝影機距離，讓每個形狀都能完美放進框內 (稍微留白 1.4 倍)
+    const shapeRadius = SHAPES[this.nextLevel].collisionRadius;
+    const fov = 40;
+    const cameraZ = (shapeRadius * 1.4) / Math.tan((fov / 2) * THREE.MathUtils.DEG2RAD);
+    this.nextPreviewCamera.position.set(0, 0, cameraZ);
+    this.nextPreviewCamera.lookAt(0, 0, 0);
   }
 
   private renderNextPreview(): void {
@@ -778,22 +786,28 @@ export class Game {
       this.lastTime = now;
 
       if (this.isPlaying && !this.isGameOver) {
-        // Physics
-        this.physics.world.step(this.eventQueue);
-        this.mergeSystem.processContactEvents(this.eventQueue);
-        this.mergeSystem.syncAll();
-
-        // Shape idle rotation
-        for (const shape of this.mergeSystem.getAllShapes()) {
-          const speed = this.physics.getSpeed(shape.body);
-          if (speed < 0.5) {
-            shape.mesh.rotateOnAxis(shape.rotationAxis, shape.rotationSpeed);
-          }
+        // Fixed physics timestep accumulator
+        this.physicsAccumulator += dt;
+        const physicsStep = 1 / 60; // 遵循 Rapier 預設設定
+        while (this.physicsAccumulator >= physicsStep) {
+          this.physics.world.step(this.eventQueue);
+          this.mergeSystem.processContactEvents(this.eventQueue);
+          this.physicsAccumulator -= physicsStep;
         }
+        
+        // 只需在物理算完後同步一次視覺
+        this.mergeSystem.syncAll();
 
         this.checkGameOver();
       } else {
-        this.physics.step();
+        // 非遊玩狀態且需要物理計算時（如結算畫面）
+        this.physicsAccumulator += dt;
+        const physicsStep = 1 / 60;
+        while (this.physicsAccumulator >= physicsStep) {
+          this.physics.step();
+          this.physicsAccumulator -= physicsStep;
+        }
+        this.mergeSystem.syncAll();
       }
 
       // FX (always update)
