@@ -62,15 +62,15 @@ HUD 位於 Three.js Canvas 上方（HTML DOM 層），以 `position: absolute` �
 | 🏆 排行榜按鈕 | 22px emoji, 金色邊框, hover glow 效果 |
 | ⚙️ 設定按鈕 | 22px emoji, 白色邊框, hover glow 效果 |
 | NEXT 標籤 | 同 SCORE 標籤 |
-| NEXT 預覽 | 80×80 WebGL Canvas（獨立小型 Three.js Scene 渲染 3D 形狀預覽） |
+| NEXT 預覽 | 80×80 WebGL Canvas（`#next-preview`，獨立小型 Three.js Renderer） |
 
-> **NEXT 預覽 3D 化**：使用獨立的小型 Three.js Renderer 渲染下一個形狀的 3D 旋轉預覽，取代 2D 版本的靜態截圖。
+> **NEXT 預覽（效能優化版）**：使用獨立的 80×80 Renderer 渲染下一個形狀的 3D 預覽，**on-demand 渲染**——僅在形狀輪替時重繪一次，不佔每幀渲染預算（早期版本為每幀旋轉渲染）。
 
 ### Evolution Bar（演化條）
 
 - 位於主 Canvas 下方
 - 顯示當前難度下所有 3D 形狀的小型預覽圖，從小到大一列排列
-- 使用 CSS 渲染小型 Canvas 或預生成的 PNG 快照
+- 由共用的 **128×128 snapshot renderer**（`renderSnapshot()`）離屏渲染每個等級形狀，輸出 dataURL PNG 圖片
 - 背景：`rgba(255,255,255,0.03)`，上方 1px 分隔線
 
 ---
@@ -193,10 +193,10 @@ HUD 位於 Three.js Canvas 上方（HTML DOM 層），以 `position: absolute` �
 
 | 元素 | 規格 |
 |------|------|
-| 瞄準射線 | 垂直半透明柱體 `CylinderGeometry(0.02, 0.02, 15)`，alpha=0.10 |
-| 幽靈形狀 | 當前形狀的 3D Mesh（透明度 0.35，無 Bloom），懸浮在容器頂端 |
-| 幽靈位置 Y | 容器頂端 Y=14（略低於容器開口） |
-| X/Z 座標 | 由 Raycaster 投射到投放平面計算，Clamp 至牆壁安全範圍 |
+| 瞄準射線 | 垂直半透明柱體 `CylinderGeometry(0.02, 0.02, CONTAINER_HEIGHT=12)`，白色 alpha=0.10 |
+| 幽靈形狀 | 當前形狀的 3D Mesh（複製材質改為 transparent, opacity=0.35, FrontSide, depthWrite=false） |
+| 幽靈位置 Y | `DROP_Y = 12.5`（容器開口上方） |
+| X/Z 座標 | 由 Raycaster 投射到 Z=0 垂直平面計算，Clamp 至牆壁安全範圍（半徑 + 0.08） |
 
 **隱藏條件**：投放冷卻中 (`!canDrop`) 或遊戲結束 (`isGameOver`)
 
@@ -244,13 +244,13 @@ HUD 位於 Three.js Canvas 上方（HTML DOM 層），以 `position: absolute` �
 
 - **方法**：Three.js Renderer `setSize()` + Camera `aspect` 更新
 - **策略**：保持整個視窗填滿，camera.aspect 動態調整
-- 觸發：`window.resize` 事件 + 初始化時呼叫
+- 觸發：`window.resize` + `visualViewport.resize` 事件（行動裝置網址列收合時尺寸取自 `visualViewport`）+ 初始化時呼叫
 - CSS2DRenderer 同步更新 size
 
 ```typescript
 function onResize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const w = window.visualViewport?.width ?? window.innerWidth;
+  const h = window.visualViewport?.height ?? window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);

@@ -19,10 +19,11 @@ WASM 初始化
   │  • Three.js Scene / Camera / Renderer 建立
   │  • CSS2DRenderer 建立
   │  • EffectComposer + UnrealBloomPass 初始化
-  │  • 光照系統設定（Ambient + Point Lights）
+  │  • 光照系統設定（Ambient + 三向 DirectionalLight）
   │  • Geometry / Material 工廠初始化
-  │  • 建立所有 System：Physics / Merge / Particle / AimGuide / Audio
-  │  • 建立所有 UI：HUD / OverlayManager
+  │  • 建立所有 System：Physics / Merge / Particle / GridFlow / Audio / CameraOrbit
+  │  • 建立瞄準導線 + NEXT 預覽 Renderer（內建於 Game）
+  │  • 綁定 DOM HUD / Overlay 事件（index.html）
   │  • 繪製 3D 環境（地板格線、容器線框、Game Over 平面）
   │  • 綁定輸入事件
   │  • 綁定 UI 按鈕事件
@@ -54,30 +55,31 @@ WASM 初始化
   ▼
 ◀─────────── 遊戲主循環 (gameLoop, requestAnimationFrame) ──────────
 │              │
-│              │  1. world.step() — Rapier3D 物理步進
-│              │  2. 同步 Rapier3D Body → Three.js Mesh（position + quaternion）
-│              │  3. 更新 3D 粒子系統
-│              │  4. 更新形狀自轉動畫（未碰撞中的形狀）
-│              │  5. 檢查 Game Over 條件
-│              │  6. 套用攝影機震動效果
-│              │  7. 更新瞄準導線位置
-│              │  8. composer.render() — 含後處理的場景渲染
-│              │  9. css2DRenderer.render() — UI 覆蓋層渲染
+│              │  1. Fixed timestep accumulator（dt 上限 50ms）：
+│              │     while (accumulator ≥ 1/60):
+│              │       world.step(eventQueue) → processContactEvents()
+│              │  2. syncAll() — 物理算完後同步一次 Body → Mesh（position + quaternion）
+│              │  3. 檢查 Game Over 條件
+│              │  4. 更新 3D 粒子系統 + 格線光流
+│              │  5. CameraOrbit.update() → 攝影機震動偏移疊加其上
+│              │  6. postProcessing.render() — 含 Bloom 的場景渲染
+│              │  7. css2DRenderer.render() — UI 覆蓋層渲染
+│              │  （NEXT 預覽為 on-demand，不在每幀渲染）
 │              │
 │   玩家點擊/觸控
 │       │
 │       ▼
 │  handleDrop(screenX, screenY)
-│    ├── 若 !canDrop || isGameOver → 忽略
+│    ├── 若 !canDrop || isGameOver || 拖曳攝影機中 → 忽略
 │    ├── canDrop = false
-│    ├── Raycaster 投射到投放平面 → 取得 3D worldX
-│    ├── Clamp X 到牆壁安全範圍內
-│    ├── 建立 Rapier3D Dynamic Body + Three.js Mesh（含 Material + Edges）
+│    ├── Raycaster 投射到 Z=0 垂直平面 → 取得 3D worldX
+│    ├── Clamp X 到牆壁安全範圍內（半徑 + 0.08）
+│    ├── 於 (clampedX, DROP_SPAWN_Y=14.5, 0) 建立 Rapier3D Dynamic Body + Three.js Mesh
 │    ├── 播放投落音效
 │    ├── currentLevel = nextLevel
 │    ├── nextLevel = 隨機新等級
-│    ├── 更新 NEXT 3D 預覽
-│    └── setTimeout(450ms) → canDrop = true
+│    ├── 更新 NEXT 預覽（on-demand 重繪）
+│    └── setTimeout(250ms) → canDrop = true
 │       │
 │       ▼
 │  [Rapier3D World 自動模擬 60Hz]
@@ -108,12 +110,13 @@ WASM 初始化
   ▼ (Game Over 觸發)
   │
 遊戲結束 (triggerGameOver)
-  │  • 停止物理模擬（world.free()）
-  │  • 顯示模糊遮罩（CSS backdrop-filter: blur）
-  │  • 清理所有 Body / Mesh / Particle（含 dispose）
+  │  • isPlaying = false、canDrop = false、隱藏瞄準導線
+  │  • 播放 gameover 音效
+  │  • 物理模擬繼續（結算畫面背景形狀持續沉降）
   │  • 更新本機最高分（localStorage）
   │  • 顯示 Game Over Overlay
-  │  • 提交分數到後端 API
+  │  • 提交分數（本地排行榜 + 後端 API）
+  │  （殘留 Body/Mesh 於下一局 startGame 時清理）
   │
   ▼
 玩家點擊「再來一局」
@@ -132,7 +135,7 @@ WASM 初始化
 
 | # | 條件 | 說明 |
 |---|------|------|
-| 1 | `body.translation().y > GAME_OVER_LINE_Y (13)` | 形狀超出判定線（3D Y 座標） |
+| 1 | `body.translation().y > GAME_OVER_LINE_Y (12)` | 形狀超出判定線（= 容器頂端） |
 | 2 | Body userData 為遊戲形狀 | 非牆壁 |
 | 3 | `body.linvel().length() < 0.3` | 形狀已趨於靜止（3D 速度向量長度） |
 
@@ -181,8 +184,8 @@ WASM 初始化
 ### 投放座標（3D 版本）
 
 ```typescript
-// Raycaster 投射到投放平面 Y=14
-const dropPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -14);
+// Raycaster 投射到 Z=0 垂直平面（與視線近乎垂直，游標對應線性）
+const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 const worldPoint = new THREE.Vector3();
 raycaster.ray.intersectPlane(dropPlane, worldPoint);
 
@@ -197,7 +200,8 @@ const dropZ = 0;
 
 ### 投放 Y 起始位置
 
-- 所有形狀從 `Y = 15 + shape.collisionRadius` 開始（容器頂端上方），自然落進容器
+- 所有形狀從 `DROP_SPAWN_Y = 14.5`（容器頂端 + 2.5）生成，自然落進容器
+- 幽靈預覽形狀懸浮在 `DROP_Y = 12.5`
 
 ### 形狀輪替流程
 

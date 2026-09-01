@@ -6,7 +6,7 @@
 
 ## 2.1 3D 遊戲場景結構
 
-本遊戲為**單一 3D 場景**（Single Scene）設計，所有互動在同一個 Three.js Scene 中完成。攝影機以**固定傾斜俯視角**觀察容器內的 3D 多面體堆疊。
+本遊戲為**單一 3D 場景**（Single Scene）設計，所有互動在同一個 Three.js Scene 中完成。攝影機以**傾斜俯視角**觀察容器內的 3D 多面體堆疊，並由 `CameraOrbit`（`src/core/camera-orbit.ts`）管理，支援拖曳環繞與回復預設視角。
 
 ### 座標系統
 
@@ -20,10 +20,12 @@ Three.js 採用**右手座標系**：
 | 參數 | 數值 | 說明 |
 |------|------|------|
 | 容器寬度 | 10 units | X 軸方向 |
-| 容器深度 | 10 units | Z 軸方向 |
-| 容器高度 | 15 units | Y 軸方向（形狀堆疊空間） |
+| 容器深度 | 5 units | Z 軸方向（= Lv.8 最大形狀直徑） |
+| 容器高度 | 12 units | Y 軸方向（形狀堆疊空間） |
 | 地板 Y | 0 | 容器底部 |
-| Game Over 線 Y | 13 | 判定線高度（靠近頂端） |
+| Game Over 線 Y | 12 | 判定線**切齊容器頂端**（`GAME_OVER_LINE_Y = CONTAINER_HEIGHT`） |
+| 投放瞄準 Y | 12.5 | 幽靈預覽形狀懸浮高度（`DROP_Y`） |
+| 形狀生成 Y | 14.5 | 實際生成點（`DROP_SPAWN_Y = CONTAINER_HEIGHT + 2.5`） |
 
 > **設計說明**：從 2D 的像素座標改為 3D 世界單位。容器為一個無蓋的透明箱體，玩家從頂端投入 3D 多面體。
 
@@ -32,9 +34,8 @@ Three.js 採用**右手座標系**：
 ```
           攝影機（PerspectiveCamera，俯視 ~30°）
               ↘
-     ┌──────────────────┐  Y=15（容器頂端開口）
-     │                  │
-     │  Game Over Line  │  Y=13（紅色半透明平面）
+     ═══════════════════  Y=12（容器頂端開口 = Game Over 紅色半透明平面）
+     │                  │      ↑ 形狀由 Y=14.5 生成落下
      │                  │
      │   3D 多面體      │  ← 形狀在此堆疊
      │   落下堆疊區     │
@@ -54,8 +55,8 @@ Three.js 採用**右手座標系**：
 | 地板 | Y=0 | Static Cuboid | 底部平面 |
 | 左牆 | X=-5 | Static Cuboid | 左側邊界 |
 | 右牆 | X=+5 | Static Cuboid | 右側邊界 |
-| 前牆 | Z=+5 | Static Cuboid | 前方邊界（面向攝影機） |
-| 後牆 | Z=-5 | Static Cuboid | 後方邊界 |
+| 前牆 | Z=+2.5 | Static Cuboid | 前方邊界（面向攝影機） |
+| 後牆 | Z=-2.5 | Static Cuboid | 後方邊界 |
 
 > **3D 新增**：相較 2D 版本只有左右牆與地板，3D 版本新增了前後牆（Z 軸），形成完整的四面無蓋容器。前牆可設為透明或半透明，讓攝影機可見內部。
 
@@ -65,8 +66,8 @@ Three.js 採用**右手座標系**：
 |------|------|------|
 | 類型 | PerspectiveCamera | 透視攝影機 |
 | FOV | 45° | 視野角度 |
-| 位置 | (0, 18, 20) | 上方偏前 |
-| lookAt | (0, 5, 0) | 注視容器中央 |
+| 位置 | (0, 6.35, 22) | 前方略高（`CAMERA_POSITION`） |
+| lookAt | (0, 5.35, 0) | 注視容器中央偏下（`CAMERA_LOOKAT`） |
 | near | 0.1 | 近裁切面 |
 | far | 100 | 遠裁切面 |
 
@@ -82,7 +83,7 @@ Three.js 採用**右手座標系**：
 | 2 | `containerGroup` | Group | 容器牆壁（透明邊框）、霓虹發光線條 |
 | 3 | `gameOverPlane` | Mesh | 半透明紅色平面 Game Over 判定線 |
 | 4 | `shapesGroup` | Group | 所有 3D 多面體 Mesh |
-| 5 | `particlesGroup` | Group | 合成爆炸 3D 粒子（Ring/Shard/Dot） |
+| 5 | `particlesGroup` | Group | 合成爆炸 3D 粒子（InstancedMesh 碎片，200 顆 pool） |
 | 6 | `uiOverlay` | CSS2DRenderer | 浮動分數文字、COMBO 提示（HTML 覆蓋層） |
 | 7 | `aimGuideGroup` | Group | 投放瞄準射線 + 預覽幽靈形狀 |
 
@@ -126,17 +127,17 @@ Tetra     Sphere(S)  Cube    Dodeca         Icosa          Sphere(M) Octa       
 
 | 等級 | 名稱 | 3D Geometry | 面數 | 碰撞半徑 | 顏色 HEX | 顏色描述 | 得分 |
 |------|------|------------|------|---------|----------|---------|------|
-| Lv.0 | Tetrahedron（正四面體） | `TetrahedronGeometry` | 4 | 0.46 | `#00FFFF` | 青色 | 1 |
-| Lv.1 | Small Sphere（小球體） | `SphereGeometry` | — | 0.58 | `#FFFF00` | 黃色 | 3 |
-| Lv.2 | Cube（立方體） | `BoxGeometry` | 6 | 0.72 | `#FF6B6B` | 珊瑚紅 | 6 |
-| Lv.3 | Dodecahedron（正十二面體） | `DodecahedronGeometry` | 12 | 0.94 | `#39FF14` | 螢光綠 | 10 |
-| Lv.4 | Icosahedron（正二十面體） | `IcosahedronGeometry` | 20 | 1.14 | `#FF8C00` | 橙色 | 15 |
-| Lv.5 | Sphere（中球體） | `SphereGeometry` | — | 1.40 | `#FF00FF` | 洋紅 | 21 |
-| Lv.6 | Octahedron（正八面體） | `OctahedronGeometry` | 8 | 1.76 | `#BF00FF` | 紫色 | 28 |
-| Lv.7 | Truncated Icosahedron（截角二十面體） | 自訂 `BufferGeometry` | 32 | 2.08 | `#00FF88` | 青綠 | 36 |
+| Lv.0 | Tetrahedron（正四面體） | `TetrahedronGeometry` | 4 | 0.50 | `#00FFFF` | 青色 | 1 |
+| Lv.1 | Small Sphere（小球體） | `SphereGeometry` | — | 0.61 | `#FFFF00` | 黃色 | 3 |
+| Lv.2 | Cube（立方體） | `BoxGeometry` | 6 | 0.75 | `#FF6B6B` | 珊瑚紅 | 6 |
+| Lv.3 | Dodecahedron（正十二面體） | `DodecahedronGeometry` | 12 | 0.91 | `#39FF14` | 螢光綠 | 10 |
+| Lv.4 | Icosahedron（正二十面體） | `IcosahedronGeometry` | 20 | 1.12 | `#FF8C00` | 橙色 | 15 |
+| Lv.5 | Sphere（中球體） | `SphereGeometry` | — | 1.37 | `#FF00FF` | 洋紅 | 21 |
+| Lv.6 | Octahedron（正八面體） | `OctahedronGeometry` | 8 | 1.67 | `#BF00FF` | 紫色 | 28 |
+| Lv.7 | Truncated Icosahedron（截角二十面體） | 自訂 `BufferGeometry` | 32 | 2.04 | `#00FF88` | 青綠 | 36 |
 | Lv.8 | Large Sphere（大球體） | `SphereGeometry` | — | 2.50 | `#FFFFFF` | 白色 | 50 |
 
-> **3D 碰撞體設計**：所有形狀一律使用 **Rapier3D 球形碰撞體**（`ColliderDesc.ball(radius)`），碰撞半徑略大於視覺 Mesh 的包圍球半徑 +0.06 units，提供容錯空間。這與 2D 版本的設計哲學一致——簡化物理計算、避免複雜凸包碰撞。
+> **3D 碰撞體設計**：所有形狀一律使用 **Rapier3D 球形碰撞體**（`ColliderDesc.ball(radius)`），實際碰撞半徑 = `collisionRadius + COLLISION_RADIUS_PADDING(-0.02)`——**負 padding 讓碰撞球略縮**，消除多面體平面與球形碰撞體之間的視覺空隙，讓堆疊更密合。同時啟用 **CCD 連續碰撞檢測**（`setCcdEnabled(true)`）防止小球高速穿模。球形碰撞體簡化物理計算、避免複雜凸包碰撞，與 2D 版本設計哲學一致。
 
 ### 合成規則
 
@@ -157,12 +158,12 @@ Tetra     Sphere(S)  Cube    Dodeca         Icosa          Sphere(M) Octa       
 ### 碰撞半徑成長曲線
 
 ```
-碰撞半徑: 0.46 → 0.58 → 0.72 → 0.94 → 1.14 → 1.40 → 1.76 → 2.08 → 2.50
-倍率:      1.0   1.26   1.57   2.04   2.48   3.04   3.83   4.52   5.43
-增幅:       +0.12 +0.14  +0.22  +0.20  +0.26  +0.36  +0.32  +0.42
+碰撞半徑: 0.50 → 0.61 → 0.75 → 0.91 → 1.12 → 1.37 → 1.67 → 2.04 → 2.50
+倍率:      1.0   1.22   1.50   1.82   2.24   2.74   3.34   4.08   5.00
+增幅:       +0.11 +0.14  +0.16  +0.21  +0.25  +0.30  +0.37  +0.46
 ```
 
-**設計觀察**：碰撞半徑與 2D 版本保持相同的**成長倍率**（px 值除以 50 轉換為 3D 世界單位），確保空間壓力感一致。Lv.5（1.40）後增幅顯著加速，使大形狀成為高風險高報酬。
+**設計觀察**：半徑表經實測調整後整體較初版縮小約 18~28%，配合縮小後的容器（10×5×12），維持相近的空間壓力感。每級倍率約 ×1.22（Lv.8 為 Lv.0 的 5 倍），Lv.5（1.37）後增幅顯著加速，使大形狀成為高風險高報酬。
 
 ### 得分成長曲線
 
@@ -178,13 +179,13 @@ Tetra     Sphere(S)  Cube    Dodeca         Icosa          Sphere(M) Octa       
 
 | 等級 | 碰撞體積 (units³) | 佔容器體積% | 地板併排可容納數 |
 |------|------------------|-----------|-----------| 
-| Lv.0 | 0.41 | 0.027% | ~100 個 |
-| Lv.4 | 6.21 | 0.41% | ~16 個 |
-| Lv.8 | 65.45 | 4.36% | ~4 個 |
+| Lv.0 | 0.52 | 0.09% | ~50 個 |
+| Lv.4 | 5.88 | 0.98% | ~8 個 |
+| Lv.8 | 65.45 | 10.9% | ~2 個 |
 
-> 容器體積 ≈ 10 × 10 × 15 = 1,500 units³
+> 容器體積 ≈ 10 × 5 × 12 = 600 units³
 
-**設計結論**：3D 容器相比 2D 提供更多堆疊空間（Z 軸深度），但球形碰撞體的 3D 堆疊會產生更多空隙，整體空間壓力感與 2D 版本相近。
+**設計結論**：容器深度（5 units）剛好等於 Lv.8 直徑——Z 軸僅容一顆大球，大形狀實質上退化為「單排堆疊」，空間壓力隨等級升高急遽增加；球形碰撞體的 3D 堆疊空隙進一步強化此壓力。
 
 ### 理論最高分估算
 

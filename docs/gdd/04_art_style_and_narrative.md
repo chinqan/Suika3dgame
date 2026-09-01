@@ -13,11 +13,10 @@
 
 - 深色背景（near-black `#0a0a0f`）
 - 高飽和度霓虹配色（青色、洋紅、螢光綠、橙色）
-- **3D 半透明霓虹多面體**（MeshStandardMaterial + emissive，效能優化版）
-- 發光效果（Emissive Glow）與後處理泛光（UnrealBloomPass）
-- 3D 立體地板格線（GridHelper + 自訂 Shader）
+- **實體 flat-shaded 光澤多面體**（MeshStandardMaterial + 三向白色 DirectionalLight，低多邊形明暗面即是造型語言）
+- 後處理泛光（UnrealBloomPass）強化高亮處的霓虹氛圍
+- 3D 立體地板格線（GridHelper）
 - 格線光流（Grid Flow）3D 粒子——能量在格線上流動
-- **稜線光暈**（EdgesGeometry + 霓虹色 LineBasicMaterial）
 
 ### 風格參考
 
@@ -37,9 +36,8 @@
 |------|------|-----|------|
 | Scene 背景 | 深藍黑 | `#0a0a0f` | `scene.background = new THREE.Color(0x0a0a0f)` |
 | 環境霧氣 | 深藍黑 | `#0a0a0f` | `scene.fog = new THREE.FogExp2(0x0a0a0f, 0.02)` |
-| 容器邊框 | 青色 | `#00FFFF` (emissive) | 牆壁霓虹發光線條 |
-| 底部光 | 青色 | `#00FFFF` (PointLight) | 底部格線照射 |
-| Game Over 平面 | 紅色 | `#FF3131` (alpha=0.35) | 半透明判定面 |
+| 容器面板 | 灰白 | `#CCCCCC` (alpha=0.2) | 五面半透明面板（MeshStandardMaterial） |
+| Game Over 平面 | 紅色 | `#FF3131` (alpha=0.1) | 半透明判定面（renderOrder=1 最後渲染） |
 | 地板格線 | 青色 | `#00FFFF` | GridHelper 線條 |
 
 ### 形狀配色
@@ -62,57 +60,34 @@
 
 ## 4.3 形狀視覺設計（3D Material 系統）
 
-每個 3D 形狀由 `createNeonMesh()` 函數動態生成，包含 **3 層視覺結構**：
-
-### 三層 3D 視覺架構
-
-```
-Layer 3 (外): Bloom Glow     ── UnrealBloomPass 全場景泛光（emissive 材質自動發光）
-Layer 2 (中): Edge Wireframe  ── EdgesGeometry + LineSegments（霓虹色稜線）
-Layer 1 (內): Main Mesh       ── MeshStandardMaterial（半透明霓虹體 + emissive 發光）
-```
-
-### Layer 1：Main Mesh（主形狀）
+每個 3D 形狀由 `createNeonMesh()` 函數動態生成。
 
 > [!IMPORTANT]
-> **效能優化**：已從 `MeshPhysicalMaterial` 降級為 `MeshStandardMaterial`，移除 `transmission`/`clearcoat`。霓虹發光效果改由 `emissive` + Bloom 後處理實現，FPS 提升 ~100%。
+> **設計變更（v6+）**：形狀渲染從「半透明 emissive + 稜線光暈」的三層架構，改為**全實體 flat-shaded + 光源渲染**——取消 EdgesGeometry 稜線與材質透明度，顏色與立體感改由材質底色 + 三向白色 DirectionalLight 的明暗面呈現。低多邊形的平面切面在 flat shading 下自然形成清晰的明暗交界，取代稜線描邊的功能。
+
+### 主形狀材質（MaterialFactory）
 
 ```typescript
-const material = new THREE.MeshStandardMaterial({
-  color: shapeColor,           // 形狀基礎色
-  emissive: shapeColor,        // 自發光色（被 Bloom 放大）
-  emissiveIntensity: 0.4,      // 自發光強度
-  transparent: true,
-  opacity: 0.35,               // 半透明
-  roughness: 0.3,              // 中等粗糙度
-  metalness: 0.1,              // 微金屬感
-  side: THREE.DoubleSide,      // 雙面渲染
+const main = new THREE.MeshStandardMaterial({
+  color: shapeColor,      // 形狀基礎色（唯一的顏色來源）
+  flatShading: true,      // 平面著色 — 每個面獨立明暗，強調多面體切面
+  roughness: 0.3,         // 低粗糙度 → 光澤感
+  metalness: 0.0,         // 無金屬反射
+  side: THREE.DoubleSide,
 });
 ```
 
-**視覺效果**：半透明霓虹 3D 多面體，搭配 Bloom 效果產生強烈發光感，保持 Cyberpunk 風格的同時大幅降低 GPU 負荷。
+- Mesh 設定 `castShadow` / `receiveShadow`
+- 材質按 `level` 快取於 MaterialFactory，全形狀共用
+- 半透明材質僅保留給**幽靈預覽**（`createGhostMaterial`：MeshBasicMaterial, opacity 0.35, depthWrite false）
 
-### Layer 2：Edge Wireframe（稜線光暈）
+**視覺效果**：實體光澤多面體在深色場景中被三向白光塑形，每個切面亮度不同、輪廓清晰；高光處經 UnrealBloomPass 泛光後仍保有霓虹氛圍。
 
-```typescript
-const edges = new THREE.EdgesGeometry(geometry, 15); // 15° 角度門檻
-const lineMaterial = new THREE.LineBasicMaterial({
-  color: shapeColor,
-  transparent: true,
-  opacity: 0.9,                // 接近全亮
-  linewidth: 1,                // 注意：WebGL 限制 linewidth 僅部分生效
-});
-const wireframe = new THREE.LineSegments(edges, lineMaterial);
-mesh.add(wireframe); // 作為 Mesh 子物件
-```
+### Bloom Glow（後處理泛光）
 
-**視覺效果**：3D 多面體的每條稜線都發出霓虹色光，配合 Bloom 效果產生明亮的邊框光暈，類似 Tron 風格。
-
-### Layer 3：Bloom Glow（後處理泛光）
-
-- 由 `UnrealBloomPass` 全場景統一處理
-- `emissive` 材質中超過 `threshold=0.6` 亮度的部分會被 Bloom 放大
-- **不需額外的 Glow 繪製**——3D 版本用後處理替代 2D 版本的多圈外環
+- 由 `UnrealBloomPass` 全場景統一處理（strength=0.8, radius=0.4, threshold=0.6）
+- 超過 threshold 亮度的高光面會被 Bloom 放大
+- **不需額外的 Glow 繪製**——後處理替代 2D 版本的多圈外環
 
 ### 多面體 Geometry 細節
 
@@ -153,10 +128,10 @@ mesh.add(wireframe); // 作為 Mesh 子物件
 
 ```typescript
 const gridHelper = new THREE.GridHelper(
-  30,     // size：格線總大小
-  30,     // divisions：分割數
-  0x00FFFF, // centerLineColor：中心線顏色
-  0x00FFFF  // gridColor：格線顏色
+  GRID_SIZE,      // 30：格線總大小
+  GRID_DIVISIONS, // 15：分割數
+  GRID_COLOR,     // 0x00FFFF：中心線顏色
+  GRID_COLOR      // 0x00FFFF：格線顏色
 );
 gridHelper.material.opacity = 0.15;
 gridHelper.material.transparent = true;
@@ -175,21 +150,19 @@ gridHelper.position.y = 0.0; // 與物理地板同高
 
 | 元素 | Material | 說明 |
 |------|----------|------|
-| 容器框架 | `LineBasicMaterial`, color=`#00FFFF`, opacity=0.6 | 12 條邊的線框立方體 |
-| 前牆面 | `MeshBasicMaterial`, transparent, opacity=0.03 | 幾乎全透明（讓攝影機看穿） |
-| 側/後牆面 | `MeshBasicMaterial`, transparent, opacity=0.06 | 略有存在感 |
+| 五面面板（前/後/左/右/底） | `MeshStandardMaterial`, color=`#CCCCCC`, opacity=0.2, roughness=0.8, depthWrite=false | 灰白半透明面板，受光照影響 |
 
-> **設計說明**：容器牆壁僅以霓虹線框呈現，不用實體面遮擋視線。前面牆特別透明，確保攝影機視角下形狀清楚可見。
+> **設計變更（v6+）**：容器從「霓虹線框」改為**五面灰白半透明面板**——形狀改為實體渲染後，需要一個中性的「玻璃箱」襯托形狀本身的色彩，且半透明面板可被 DirectionalLight 照亮，呈現柔和的空間邊界。`depthWrite: false` 確保面板不遮擋內部形狀。
 
 ### Game Over 判定面
 
-- 半透明紅色平面，Y=13
-- `MeshBasicMaterial`, color=`#FF3131`, opacity=0.15, side=DoubleSide
-- 帶有微弱的 emissive 讓 Bloom 產生淡紅光暈
+- 半透明紅色平面，Y=12（切齊容器頂端）
+- `MeshBasicMaterial`, color=`#FF3131`, opacity=0.1, side=DoubleSide, depthWrite=false
+- `renderOrder = 1`：最後渲染，作為半透明遮擋層覆蓋在形狀之上
 
-### 背景微格線
+### 背景氛圍
 
-3D 版本中，背景微格線由遠處的大型 GridHelper 實現，透明度極低（0.02），在潛意識層面強化「數位空間」氛圍。
+背景以 `FogExp2`（density 0.02，同背景色 `#0a0a0f`）讓格線向遠處漸隱，在潛意識層面強化「無限數位空間」氛圍。
 
 ---
 
@@ -207,7 +180,7 @@ gridHelper.position.y = 0.0; // 與物理地板同高
 | 格線光流 | 數位空間中流動的能量脈衝 |
 | 遊戲結束 = 堆出容器 | 能量容器溢出，系統崩潰 |
 | 深黑背景 + 霧氣 | 虛空中的數位微宇宙 |
-| 多面體稜線光暈 | 能量在結晶體的稜邊流動 |
+| 多面體明暗切面 | 能量結晶體的稜面反射光——每個切面是一個能量刻面 |
 
 ### 形狀能量隱喻（3D 版本）
 
